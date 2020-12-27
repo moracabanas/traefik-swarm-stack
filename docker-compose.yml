@@ -4,34 +4,39 @@ services:
   traefik:
     container_name: ${TRAEFIK_CONTAINER_NAME:-traefik}
     image: "traefik:${TRAEFIK_IMAGE_TAG:-latest}"
-    command:
-      - "--log.level=DEBUG"
-      - "--api.insecure=true"
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--entrypoints.websecure.address=:443" # Traefik will listen to incoming request on the port 443 (https)
-      - "--certificatesresolvers.mytlschallenge.acme.tlschallenge=true" # Enable a tls challenge named "mytlschallenge"
-      #- "--certificatesresolvers.mytlschallenge.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory"
-      - "--certificatesresolvers.mytlschallenge.acme.email=${ACME_EMAIL}"
-      - "--certificatesresolvers.mytlschallenge.acme.storage=/letsencrypt/acme.json" # Tell to store the certificate on a path under our volume
     ports:
       - "80:80"
       - "443:443"
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock:ro" 
       - ".letsencrypt:/letsencrypt" # Create a letsencrypt dir within the folder where the docker-compose file is
+    command:
+      - "--log.level=DEBUG" # Verbose debug
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false" # Do not expose containers by default
+      # Define entrypoints
+      - "--entryPoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      # Letsencrypt for https
+      # - "--certificatesresolvers.le.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory"
+      - "--certificatesresolvers.le.acme.email=${ACME_EMAIL}"
+      - "--certificatesresolvers.le.acme.httpchallenge.entryPoint=web"
+      #- "--certificatesResolvers.le.acme.tlschallenge=true" # Enable a tls challenge named "le"
+      - "--certificatesresolvers.le.acme.httpchallenge=true" # Enable a http challenge named le
+      - "--certificatesresolvers.le.acme.storage=/letsencrypt/acme.json" # Tell to store the certificate on a path under our volume
     labels:
-      # Redirect 80 to 443
-      - "traefik.http.routers.http-catchall.rule=hostregexp(`{host:.+}`)"
-      - "traefik.http.routers.http-catchall.entrypoints=web"
-      - "traefik.http.routers.http-catchall.middlewares=redirect-to-https"
-      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+      # Redirect 80 to 443 (force https everywhere)
+      - "traefik.http.routers.https-redirect.entrypoints=web"
+      - "traefik.http.routers.https-redirect.rule=hostregexp(`{any:.*}`)" 
+      - "traefik.http.routers.https-redirect.middlewares=redirect-to-https"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=websecure"
       
       # Traefic dashboard
       - "traefik.enable=true"
       - "traefik.http.routers.traefik.rule=Host(`${URL_TRAEFIK_DASHBOARD}`)"
       - "traefik.http.routers.traefik.service=api@internal"
-      - "traefik.http.routers.traefik.tls.certresolver=mytlschallenge"
+      - "traefik.http.routers.traefik.tls.certresolver=le"
       - "traefik.http.routers.traefik.entrypoints=websecure"
       - "traefik.http.routers.traefik.middlewares=authtraefik"
       - "traefik.http.middlewares.authtraefik.basicauth.users=${HTTPD_AUTH}"
@@ -47,19 +52,19 @@ services:
       - portainer_data:/data
     labels:
       # Frontend
-      - "traefik.enable=true"
+      - "traefik.enable=true" # Expose this container
       - "traefik.http.routers.frontend.rule=Host(`${URL_PORTAINER_FRONTEND}`)"
       - "traefik.http.routers.frontend.entrypoints=websecure"
       - "traefik.http.services.frontend.loadbalancer.server.port=9000"
       - "traefik.http.routers.frontend.service=frontend"
-      - "traefik.http.routers.frontend.tls.certresolver=mytlschallenge" # Uses the Host rule to define which certificate to issue
+      - "traefik.http.routers.frontend.tls.certresolver=le" # Uses the Host rule to define which certificate to issue
       
       # Edge
       - "traefik.http.routers.edge.rule=Host(`${URL_PORTAINER_EDGE}`)"
       - "traefik.http.routers.edge.entrypoints=websecure"
       - "traefik.http.services.edge.loadbalancer.server.port=8000"
       - "traefik.http.routers.edge.service=edge"
-      - "traefik.http.routers.edge.tls.certresolver=mytlschallenge" # Uses the Host rule to define which certificate to issue
+      - "traefik.http.routers.edge.tls.certresolver=le" # Uses the Host rule to define which certificate to issue
 
 
 volumes:
@@ -67,5 +72,6 @@ volumes:
 
 
 # Docs
+# https://github.com/traefik/traefik/issues/4863#issuecomment-572157379
 # https://doc.traefik.io/traefik/v2.0/user-guides/docker-compose/acme-tls/
 # https://github.com/xe-nvdk/awesome-docker/tree/main/traefik-nextcloud-psql
