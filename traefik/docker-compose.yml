@@ -30,7 +30,7 @@ services:
       - "traefik.http.routers.https-redirect.entrypoints=web"
       - "traefik.http.routers.https-redirect.rule=hostregexp(`{any:.*}`)" 
       - "traefik.http.routers.https-redirect.middlewares=redirect-to-https"
-      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=websecure"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
       
       # Traefic dashboard
       - "traefik.enable=true"
@@ -41,34 +41,10 @@ services:
       - "traefik.http.routers.traefik.middlewares=authtraefik"
       - "traefik.http.middlewares.authtraefik.basicauth.users=${HTTPD_AUTH}"
 
-      
-  portainer:
-    container_name: ${PORTAINER_CONTAINER_NAME:-portainer}
-    image: portainer/${PORTAINER_IMAGE_TAG:-portainer-ce}
-    command: -H unix:///var/run/docker.sock
-    restart: always
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - portainer_data:/data
-    labels:
-      # Frontend
-      - "traefik.enable=true" # Expose this container
-      - "traefik.http.routers.frontend.rule=Host(`${URL_PORTAINER_FRONTEND}`)"
-      - "traefik.http.routers.frontend.entrypoints=websecure"
-      - "traefik.http.services.frontend.loadbalancer.server.port=9000"
-      - "traefik.http.routers.frontend.service=frontend"
-      - "traefik.http.routers.frontend.tls.certresolver=le" # Uses the Host rule to define which certificate to issue
-      
-      # Edge
-      - "traefik.http.routers.edge.rule=Host(`${URL_PORTAINER_EDGE}`)"
-      - "traefik.http.routers.edge.entrypoints=websecure"
-      - "traefik.http.services.edge.loadbalancer.server.port=8000"
-      - "traefik.http.routers.edge.service=edge"
-      - "traefik.http.routers.edge.tls.certresolver=le" # Uses the Host rule to define which certificate to issue
-
-
-volumes:
-  portainer_data:
+networks:
+  default:
+    external:
+      name: ${NETWORK:-reverse-proxy}
 
 
 # Docs
