@@ -23,7 +23,7 @@ services:
       - "--certificatesresolvers.le.acme.email=${ACME_EMAIL}"
       - "--certificatesresolvers.le.acme.httpchallenge.entryPoint=web"
       #- "--certificatesResolvers.le.acme.tlschallenge=true" # Enable a tls challenge named "le"
-      - "--certificatesresolvers.le.acme.httpchallenge=true" # Enable a http challenge named le
+      - "--certificatesresolvers.le.acme.httpchallenge=true" # Enable a http challenge named "le"
       - "--certificatesresolvers.le.acme.storage=/letsencrypt/acme.json" # Tell to store the certificate on a path under our volume
     labels:
       # Redirect 80 to 443 (force https everywhere)
