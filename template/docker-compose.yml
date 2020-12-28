@@ -1,0 +1,43 @@
+# https://docs.docker.com/compose/gettingstarted/
+
+version: "3.9"
+
+services:
+  web:
+    container_name: ${SERVICE_NAME}
+    build:
+      context: .
+      args:
+        # .env EXPOSED_PORT=5000 -> Dockerfile ARG PORT -> built image exposes port 5000 -> port 5000 exposed by the container 
+        # on the defined isolated network (reverse-proxy)
+        PORT: ${EXPOSED_PORT1}
+    labels: # Connecting service to traefik load balancer as reverse proxy
+      # Default exposed 80 port example 
+      #- "traefik.enable=true"
+      #- "traefik.http.routers.${SERVICE_NAME}.rule=Host(`$URL_SERVICE`)"
+      #- "traefik.http.routers.${SERVICE_NAME}.entrypoints=websecure"
+      #- "traefik.http.routers.${SERVICE_NAME}.tls.certresolver=le"
+      
+      # Non standard exposed port
+      - "traefik.enable=true"
+      - "traefik.http.routers.${SERVICE_NAME}.rule=Host(`${URL_SERVICE}`)"
+      - "traefik.http.routers.${SERVICE_NAME}.entrypoints=websecure"
+      - "traefik.http.services.${SERVICE_NAME}.loadbalancer.server.port=${EXPOSED_PORT1}"
+      - "traefik.http.routers.${SERVICE_NAME}.service=${SERVICE_NAME}"
+      - "traefik.http.routers.${SERVICE_NAME}.tls.certresolver=le" # Uses the Host rule to define which certificate to issue
+
+  redis:
+    image: "redis:alpine"
+      
+# -------
+
+# This network connects this services to traefik isolated from the host machine.
+networks:
+  default:
+    external:
+      name: ${NETWORK:-reverse-proxy}
+
+# Docs
+# https://github.com/traefik/traefik/issues/4863#issuecomment-572157379
+# https://doc.traefik.io/traefik/v2.0/user-guides/docker-compose/acme-tls/
+# https://github.com/xe-nvdk/awesome-docker/tree/main/traefik-nextcloud-psql
