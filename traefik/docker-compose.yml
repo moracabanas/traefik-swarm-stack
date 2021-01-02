@@ -1,53 +1,129 @@
-version: "3.3"
+# https://dockerswarm.rocks/traefik/
+version: '3.3'
+
+secrets:
+  # secret name also used to name the file exposed within the container
+  USERS:
+     # path on the host
+    file: "./.secrets/USERS.secret"
 
 services:
   traefik:
-    container_name: ${TRAEFIK_CONTAINER_NAME:-traefik}
-    image: "traefik:${TRAEFIK_IMAGE_TAG:-latest}"
+    # Use the latest Traefik image
+    image: traefik:latest
     ports:
-      - "80:80"
-      - "443:443"
+      # Listen on port 80, default for HTTP, necessary to redirect to HTTPS
+      - 80:80
+      # Listen on port 443, default for HTTPS
+      - 443:443
+    secrets: 
+        - USERS
+    deploy:
+      placement:
+        constraints:
+          # Make the traefik service run only on the node with this label
+          # as the node with it has the volume for the certificates
+          - node.labels.traefik-public.traefik-public-certificates == true
+      labels:
+        # Enable Traefik for this service, to make it available in the public network
+        - traefik.enable=true
+
+        # Use the traefik-public network (declared below)
+        - traefik.docker.network=traefik-public
+
+        # Use the custom label "traefik.constraint-label=traefik-public"
+        # This public Traefik will only use services with this label
+        # That way you can add other internal Traefik instances per stack if needed
+        - traefik.constraint-label=traefik-public
+
+        # admin-auth middleware with HTTP Basic auth
+        # Using the environment variables USERNAME and HASHED_PASSWORD
+        #- traefik.http.middlewares.admin-auth.basicauth.users=${HTTPD_AUTH}
+        - traefik.http.middlewares.admin-auth.basicauth.usersfile=/run/secrets/USERS
+
+        # https-redirect middleware to redirect HTTP to HTTPS
+        # It can be re-used by other stacks in other Docker Compose files
+        - traefik.http.middlewares.https-redirect.redirectscheme.scheme=https
+        - traefik.http.middlewares.https-redirect.redirectscheme.permanent=true
+        
+
+        # traefik-http set up only to use the middleware to redirect to https
+        # Uses the environment variable DOMAIN
+        - traefik.http.routers.traefik-public-http.rule=Host(`${DOMAIN?Variable not set}`)
+        - traefik.http.routers.traefik-public-http.entrypoints=http
+        - traefik.http.routers.traefik-public-http.middlewares=https-redirect
+
+        # traefik-https the actual router using HTTPS
+        # Uses the environment variable DOMAIN
+        - traefik.http.routers.traefik-public-https.rule=Host(`${DOMAIN?Variable not set}`)
+        - traefik.http.routers.traefik-public-https.entrypoints=https
+        - traefik.http.routers.traefik-public-https.tls=true
+
+        # Use the special Traefik service api@internal with the web UI/Dashboard
+        - traefik.http.routers.traefik-public-https.service=api@internal
+
+        # Use the "le" (Let's Encrypt) resolver created below
+        - traefik.http.routers.traefik-public-https.tls.certresolver=le
+
+        # Enable HTTP Basic auth, using the middleware created above
+        - traefik.http.routers.traefik-public-https.middlewares=admin-auth
+        
+        # Define the port inside of the Docker service to use
+        - traefik.http.services.traefik-public.loadbalancer.server.port=8080
     volumes:
-      - "/var/run/docker.sock:/var/run/docker.sock:ro" 
-      - ".letsencrypt:/letsencrypt" # Create a letsencrypt dir within the folder where the docker-compose file is
+      # Add Docker as a mounted volume, so that Traefik can read the labels of other services
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Mount the volume to store the certificates
+      # - traefik-public-certificates:/certificates
+      - ${CERTIFICATES_VOLUME:-traefik-public-certificates}:/certificates
+
     command:
-      - "--log.level=DEBUG" # Verbose debug
-      - "--api.insecure=true"
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false" # Do not expose containers by default
-      # Define entrypoints
-      - "--entryPoints.web.address=:80"
-      - "--entrypoints.websecure.address=:443"
-      # Letsencrypt for https
-      # - "--certificatesresolvers.le.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory"
-      - "--certificatesresolvers.le.acme.email=${ACME_EMAIL}"
-      - "--certificatesresolvers.le.acme.httpchallenge.entryPoint=web"
-      #- "--certificatesResolvers.le.acme.tlschallenge=true" # Enable a tls challenge named "le"
-      - "--certificatesresolvers.le.acme.httpchallenge=true" # Enable a http challenge named "le"
-      - "--certificatesresolvers.le.acme.storage=/letsencrypt/acme.json" # Tell to store the certificate on a path under our volume
-    labels:
-      # Redirect 80 to 443 (force https everywhere)
-      - "traefik.http.routers.https-redirect.entrypoints=web"
-      - "traefik.http.routers.https-redirect.rule=hostregexp(`{any:.*}`)" 
-      - "traefik.http.routers.https-redirect.middlewares=redirect-to-https"
-      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
-      
-      # Traefic dashboard
-      - "traefik.enable=true"
-      - "traefik.http.routers.traefik.rule=Host(`${URL_TRAEFIK_DASHBOARD}`)"
-      - "traefik.http.routers.traefik.service=api@internal"
-      - "traefik.http.routers.traefik.tls.certresolver=le"
-      - "traefik.http.routers.traefik.entrypoints=websecure"
-      - "traefik.http.routers.traefik.middlewares=authtraefik"
-      - "traefik.http.middlewares.authtraefik.basicauth.users=${HTTPD_AUTH}"
+      # Enable Docker in Traefik, so that it reads labels from Docker services
+      - --providers.docker
+      # Add a constraint to only use services with the label "traefik.constraint-label=traefik-public"
+      - --providers.docker.constraints=Label(`traefik.constraint-label`, `traefik-public`)
+      # Do not expose all Docker services, only the ones explicitly exposed
+      - --providers.docker.exposedbydefault=false
+      # Enable Docker Swarm mode
+      - --providers.docker.swarmmode
+      # Create an entrypoint "http" listening on address 80
+      - --entrypoints.http.address=:80
+      # Create an entrypoint "https" listening on address 443
+      - --entrypoints.https.address=:443
+      # Create the certificate resolver "le" for Let's Encrypt, uses the environment variable EMAIL
+      - --certificatesresolvers.le.acme.email=${EMAIL?Variable not set}
+      # Staging CAserver (comment out for production -DEFAULT-)
+      - --certificatesresolvers.le.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory
+      # Store the Let's Encrypt certificates in the mounted volume
+      - --certificatesresolvers.le.acme.storage=/certificates/acme.json
+      # Use the TLS Challenge for Let's Encrypt
+      - --certificatesresolvers.le.acme.tlschallenge=true
+      # Enable the access log, with HTTP requests
+      - --accesslog
+      # Enable the Traefik log, for configurations and errors
+      - --log
+      # Enable the Dashboard and API
+      - --api
+    networks:
+      # Use the public network created to be shared between Traefik and
+      # any other service that needs to be publicly available with HTTPS
+      - traefik-public
+
+volumes:
+  # Create a volume to store the certificates, there is a constraint to make sure
+  # Traefik is always deployed to the same Docker node with the same volume containing
+  # the HTTPS certificates
+  traefik-public-certificates:
 
 networks:
-  default:
-    external:
-      name: ${NETWORK:-reverse-proxy}
+  # Use the previously created public network "traefik-public", shared with other
+  # services that need to be publicly available via this Traefik
+  traefik-public:
+    external: true
 
 
 # Docs
+# https://dockerswarm.rocks/traefik/
 # https://github.com/traefik/traefik/issues/4863#issuecomment-572157379
 # https://doc.traefik.io/traefik/v2.0/user-guides/docker-compose/acme-tls/
 # https://github.com/xe-nvdk/awesome-docker/tree/main/traefik-nextcloud-psql
