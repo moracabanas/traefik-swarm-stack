@@ -12,4 +12,4 @@ docker node update --label-add traefik-public.traefik-public-certificates=true $
 
 # Read .env and prevent console flood, then deploy stack
 export $(cat .env) > /dev/null 2>&1; 
-docker stack deploy -c docker-compose.yml ${1:-STACK_NAME}
+docker stack deploy -c docker-compose.yml ${1:-$STACK_NAME}
