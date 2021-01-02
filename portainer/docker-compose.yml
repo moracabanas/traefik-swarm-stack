@@ -34,13 +34,16 @@ services:
         - traefik.enable=true
         - traefik.docker.network=traefik-public
         - traefik.constraint-label=traefik-public
+
         - traefik.http.routers.${STACK_NAME}-http.rule=Host(`${DOMAIN?Variable not set}`)
         - traefik.http.routers.${STACK_NAME}-http.entrypoints=http
         - traefik.http.routers.${STACK_NAME}-http.middlewares=https-redirect
+
         - traefik.http.routers.${STACK_NAME}-https.rule=Host(`${DOMAIN?Variable not set}`)
         - traefik.http.routers.${STACK_NAME}-https.entrypoints=https
         - traefik.http.routers.${STACK_NAME}-https.tls=true
         - traefik.http.routers.${STACK_NAME}-https.tls.certresolver=le
+        
         - traefik.http.services.${STACK_NAME}.loadbalancer.server.port=${EXPOSED_PORT}
 
 networks:
