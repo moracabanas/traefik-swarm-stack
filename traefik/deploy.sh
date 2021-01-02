@@ -6,7 +6,7 @@ docker network inspect traefik-public >/dev/null 2>&1 || \
 
 # Create a label in this node, so that the required volume used by Traefik is always deployed to the same node and uses the existing volume:
 NODE_ID=$(docker info -f '{{.Swarm.NodeID}}')
-docker node update --label-add traefik-public.traefik-public-certificates=true $NODE_ID
+docker node update --label-add traefik-public.traefik-public-certificates=true $NODE_ID > /dev/null
 
 ## DEPLOY
 
