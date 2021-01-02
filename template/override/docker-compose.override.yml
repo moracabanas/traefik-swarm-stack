@@ -1,0 +1,17 @@
+ web: 
+  labels: # Connecting service to traefik load balancer as reverse proxy
+      # Default exposed 80 port example 
+      #- "traefik.enable=true"
+      #- "traefik.http.routers.${SERVICE_NAME}.rule=Host(`$URL_SERVICE`)"
+      #- "traefik.http.routers.${SERVICE_NAME}.entrypoints=websecure"
+      #- "traefik.http.routers.${SERVICE_NAME}.tls.certresolver=le"
+      
+      # Non standard exposed port
+      - "traefik.enable=true"
+      - "traefik.http.routers.${SERVICE_NAME}.rule=Host(`${URL_SERVICE}`)"
+      - "traefik.http.routers.${SERVICE_NAME}.entrypoints=websecure"
+      - "traefik.http.services.${SERVICE_NAME}.loadbalancer.server.port=${EXPOSED_PORT1}"
+      - "traefik.http.routers.${SERVICE_NAME}.service=${SERVICE_NAME}"
+      - "traefik.http.routers.${SERVICE_NAME}.tls.certresolver=le" # Uses the Host rule to define which certificate to issue
+
+    - ${NETWORK:-reverse-proxy}
