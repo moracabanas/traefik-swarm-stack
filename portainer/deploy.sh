@@ -21,6 +21,6 @@ echo -e "\n${LIGHTGREEN}Constraint labels updated${ENDCOLOR}"
 
 ## DEPLOY
 # Read .env and prevent console flood, then deploy stack
-export $(cat .env) > /dev/null 2>&1; 
+export $(cat .env | grep -v -e "^#") >/dev/null; 
 docker stack deploy -c docker-compose.yml ${1:-$STACK_NAME} \
     && echo -e "\n${LIGHTGREEN} Deployment successful ${ENDCOLOR} \n"
