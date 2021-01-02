@@ -1,10 +1,10 @@
 #!/bin/sh
 ## SETUP
-# Required cetwork check || create
+# Required network check || create
 docker network inspect traefik-public >/dev/null 2>&1 || \
     docker network create --driver=overlay traefik-public
 
-# Add Manager node label constrain required on docker-compose.yml to limit Traefik to running on this node
+# Create a label in this node, so that the required databases used by Swarmpit is always deployed to the same node and uses the existing volume:
 NODE_ID=$(docker info -f '{{.Swarm.NodeID}}')
 docker node update --label-add traefik-public.traefik-public-certificates=true $NODE_ID
 
