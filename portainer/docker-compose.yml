@@ -1,41 +1,53 @@
-version: "3.3"
+# https://dockerswarm.rocks/portainer/
+version: '3.3'
 
 services:
-  portainer:
-    container_name: ${PORTAINER_CONTAINER_NAME:-portainer}
-    image: portainer/${PORTAINER_IMAGE_TAG:-portainer-ce}
-    command: -H unix:///var/run/docker.sock
-    restart: always
+  agent:
+    image: portainer/agent
+    environment:
+      AGENT_CLUSTER_ADDR: tasks.agent
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - portainer_data:/data
-    labels:
-      # Frontend
-      - "traefik.enable=true" # Expose this container
-      - "traefik.http.routers.frontend.rule=Host(`${URL_PORTAINER_FRONTEND}`)"
-      - "traefik.http.routers.frontend.entrypoints=websecure"
-      - "traefik.http.services.frontend.loadbalancer.server.port=9000"
-      - "traefik.http.routers.frontend.service=frontend"
-      - "traefik.http.routers.frontend.tls.certresolver=le" # Uses the Host rule to define which certificate to issue
-      
-      # Edge
-      - "traefik.http.routers.edge.rule=Host(`${URL_PORTAINER_EDGE}`)"
-      - "traefik.http.routers.edge.entrypoints=websecure"
-      - "traefik.http.services.edge.loadbalancer.server.port=8000"
-      - "traefik.http.routers.edge.service=edge"
-      - "traefik.http.routers.edge.tls.certresolver=le" # Uses the Host rule to define which certificate to issue
+      - /var/lib/docker/volumes:/var/lib/docker/volumes
+    networks:
+      - agent-network
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - node.platform.os == linux
 
+  portainer:
+    image: portainer/portainer
+    command: -H tcp://tasks.agent:9001 --tlsskipverify
+    volumes:
+      - ./portainer-data:/data
+    networks:
+      - agent-network
+      - traefik-public
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+          - node.labels.portainer.portainer-data == true
+      labels:
+        - traefik.enable=true
+        - traefik.docker.network=traefik-public
+        - traefik.constraint-label=traefik-public
+        - traefik.http.routers.${STACK_NAME}-http.rule=Host(`${DOMAIN?Variable not set}`)
+        - traefik.http.routers.${STACK_NAME}-http.entrypoints=http
+        - traefik.http.routers.${STACK_NAME}-http.middlewares=https-redirect
+        - traefik.http.routers.${STACK_NAME}-https.rule=Host(`${DOMAIN?Variable not set}`)
+        - traefik.http.routers.${STACK_NAME}-https.entrypoints=https
+        - traefik.http.routers.${STACK_NAME}-https.tls=true
+        - traefik.http.routers.${STACK_NAME}-https.tls.certresolver=le
+        - traefik.http.services.${STACK_NAME}.loadbalancer.server.port=${EXPOSED_PORT}
 
 networks:
-  default:
-    external:
-      name: ${NETWORK:-reverse-proxy}
+  agent-network:
+    attachable: true
+  traefik-public:
+    external: true
 
 volumes:
-  portainer_data:
-
-
-# Docs
-# https://github.com/traefik/traefik/issues/4863#issuecomment-572157379
-# https://doc.traefik.io/traefik/v2.0/user-guides/docker-compose/acme-tls/
-# https://github.com/xe-nvdk/awesome-docker/tree/main/traefik-nextcloud-psql
+  portainer-data:
