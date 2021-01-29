@@ -8,6 +8,11 @@ ENDCOLOR="\e[0m"
 LIGHTGREEN="\e[92m"
 
 ## SETUP
+
+# SSH credentials for docker (it promps for your id_rsa passphrase if any)
+eval $(ssh-agent)
+ssh-add
+
 # Required network check || warning
 docker network inspect traefik-public >/dev/null 2>&1 || \
     echo -e "${YELLOW}WARNING:${ENDCOLOR} ${RED}This setup requires Traefik and traefik-public network ${ENDCOLOR} \ncheck this docs: ${LIGHTBLUE}https://dockerswarm.rocks/traefik/ ${ENDCOLOR}"
@@ -24,3 +29,6 @@ echo -e "\n${LIGHTGREEN}Constraint labels updated${ENDCOLOR}"
 export $(cat .env | grep -v -e "^#") >/dev/null; 
 docker stack deploy -c docker-compose.yml ${1:-$STACK_NAME} \
     && echo -e "\n${LIGHTGREEN} Deployment successful ${ENDCOLOR} \n"
+
+# Kill ssh agent
+eval $(ssh-agent -k)

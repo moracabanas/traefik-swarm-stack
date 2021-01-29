@@ -1,5 +1,11 @@
 #!/bin/sh
+
 ## SETUP
+
+# SSH credentials for docker (it promps for your id_rsa passphrase if any)
+eval $(ssh-agent)
+ssh-add
+
 # Required network check || create
 docker network inspect traefik-public >/dev/null 2>&1 || \
     docker network create --driver=overlay traefik-public
@@ -13,3 +19,5 @@ docker node update --label-add traefik-public.traefik-public-certificates=true $
 # Read .env and prevent console flood, then deploy stack
 export $(cat .env | grep -v -e "^#") 2>/dev/null; 
 docker stack deploy -c docker-compose.yml ${1:-$STACK_NAME}
+
+eval $(ssh-agent -k)
